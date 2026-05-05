@@ -5,58 +5,56 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
     /**
-     * Register a new user.
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Register a new user and start a session.
      */
     public function register(Request $request)
     {
         try {
             $validated = $request->validate([
-                'name' => 'required|string|max:255|regex:/^[a-zA-Z\s]*$/',
-                'email' => 'required|email|unique:users,email|max:255',
+                'name'     => 'required|string|max:255|regex:/^[a-zA-Z\s]*$/',
+                'email'    => 'required|email|unique:users,email|max:255',
                 'password' => 'required|string|min:8|max:255|confirmed|regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/',
             ], [
-                'name.regex' => 'The name field can only contain letters and spaces.',
+                'name.regex'     => 'The name field can only contain letters and spaces.',
                 'password.regex' => 'The password must contain at least one uppercase letter, one lowercase letter, and one number.',
-                'password.confirmed' => 'The password confirmation does not match.',
             ]);
 
             $user = User::create([
-                'name' => $validated['name'],
-                'email' => $validated['email'],
+                'name'     => $validated['name'],
+                'email'    => $validated['email'],
                 'password' => Hash::make($validated['password']),
             ]);
 
-            $token = $user->createToken('auth_token')->plainTextToken;
+            Auth::login($user);
+            $request->session()->regenerate();
 
             return response()->json([
                 'success' => true,
                 'message' => 'User registered successfully',
-                'data' => [
+                'data'    => [
                     'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
+                        'id'    => $user->id,
+                        'name'  => $user->name,
                         'email' => $user->email,
                     ],
-                    'token' => $token,
                 ],
             ], Response::HTTP_CREATED);
+
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors(),
+                'errors'  => $e->errors(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (\Exception $e) {
-            \Log::error('User registration error: ' . $e->getMessage());
+            \Log::error('Registration error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Registration failed',
@@ -65,50 +63,49 @@ class AuthController extends Controller
     }
 
     /**
-     * Login user with email and password.
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Authenticate user and start a session.
      */
     public function login(Request $request)
     {
         try {
             $validated = $request->validate([
-                'email' => 'required|email',
+                'email'    => 'required|email',
                 'password' => 'required|string|min:8',
             ]);
 
-            $user = User::where('email', $validated['email'])->first();
-
-            if (!$user || !Hash::check($validated['password'], $user->password)) {
+            if (!Auth::attempt([
+                'email'    => $validated['email'],
+                'password' => $validated['password'],
+            ])) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid credentials',
                 ], Response::HTTP_UNAUTHORIZED);
             }
 
-            $token = $user->createToken('auth_token')->plainTextToken;
+            $request->session()->regenerate();
+            $user = Auth::user();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Login successful',
-                'data' => [
+                'data'    => [
                     'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
+                        'id'    => $user->id,
+                        'name'  => $user->name,
                         'email' => $user->email,
                     ],
-                    'token' => $token,
                 ],
             ], Response::HTTP_OK);
+
         } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
-                'errors' => $e->errors(),
+                'errors'  => $e->errors(),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (\Exception $e) {
-            \Log::error('User login error: ' . $e->getMessage());
+            \Log::error('Login error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Login failed',
@@ -117,23 +114,22 @@ class AuthController extends Controller
     }
 
     /**
-     * Logout user by revoking tokens.
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Destroy the session and log out.
      */
     public function logout(Request $request)
     {
         try {
-            // Revoke all tokens for the authenticated user
-            $request->user()->tokens()->delete();
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Logout successful',
             ], Response::HTTP_OK);
+
         } catch (\Exception $e) {
-            \Log::error('User logout error: ' . $e->getMessage());
+            \Log::error('Logout error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Logout failed',
@@ -142,10 +138,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Get the authenticated user's profile.
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Return the authenticated user's profile.
+     * Used by the SPA on every page load to check session validity.
      */
     public function profile(Request $request)
     {
@@ -154,17 +148,16 @@ class AuthController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'User profile retrieved successfully',
-                'data' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
+                'message' => 'Profile retrieved successfully',
+                'data'    => [
+                    'id'    => $user->id,
+                    'name'  => $user->name,
                     'email' => $user->email,
-                    'created_at' => $user->created_at,
-                    'updated_at' => $user->updated_at,
                 ],
             ], Response::HTTP_OK);
+
         } catch (\Exception $e) {
-            \Log::error('User profile retrieval error: ' . $e->getMessage());
+            \Log::error('Profile error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve profile',

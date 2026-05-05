@@ -9,15 +9,6 @@ use Illuminate\Http\Response;
 class EmployeeController extends Controller
 {
     /**
-     * Constructor to apply authentication middleware.
-     * Only authenticated users can access employee endpoints.
-     */
-    public function __construct()
-    {
-        $this->middleware('auth:sanctum');
-    }
-
-    /**
      * Display a listing of all employees.
      */
     public function index()
