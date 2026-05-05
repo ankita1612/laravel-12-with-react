@@ -42,3 +42,34 @@ export interface RegisterFormData {
   password: string;
   password_confirmation: string;
 }
+
+// Employee types
+export interface Employee {
+  id: number;
+  name: string;
+  email: string;
+  position: string | null;
+  salary: string;
+  dob: string;
+  hobby: string | null;
+  description: string | null;
+}
+
+export interface EmployeeMeta {
+  total: number;
+  per_page: number;
+  current_page: number;
+  last_page: number;
+}
+
+export interface EmployeeFormData {
+  name: string;
+  email: string;
+  dob: string;
+  salary: string;
+  position: string;
+  hobby: string;
+  description: string;
+}
+
+export type SortDir = 'asc' | 'desc';
